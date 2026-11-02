@@ -1,6 +1,11 @@
+"""Atlas Trading AI 0.3 — Kraken OHLCV, chronological research, paper orders only.
+
+Research only; no live-order API, no claim of statistical edge.  Kraken returns
+at most 720 most-recent OHLC candles.  Intervals reset flat at their boundaries.
+"""
+
 import os
 import sqlite3
-import time
 from pathlib import Path
 
 import ccxt
@@ -10,12 +15,19 @@ import pandas as pd
 DB_PATH = Path(os.getenv("ATLAS_DB_PATH", "atlas_trading.db"))
 SYMBOLS = ["BTC/EUR", "ETH/EUR", "SOL/EUR"]
 STRATEGIES = ["EMA Trend", "RSI Reversal", "Breakout"]
+HISTORY_LIMIT = 720
+MIN_TRADES = 3
+MIN_RETURN_PCT = 0.0
+MAX_DRAWDOWN_PCT = -15.0
+MIN_PROFIT_FACTOR = 1.05
+
 
 def _connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def _init_db(initial_cash=100.0):
     with _connect() as con:
@@ -36,45 +48,56 @@ def _init_db(initial_cash=100.0):
             con.execute("INSERT INTO account(id,cash,realized_pnl,initial_cash) VALUES(1,?,?,?)",
                         (float(initial_cash), 0.0, float(initial_cash)))
 
+
 def reset_paper_account(initial_cash=100.0):
+    _init_db(initial_cash)
     with _connect() as con:
         for table in ("account", "positions", "trades", "processed"):
             con.execute(f"DELETE FROM {table}")
     _init_db(initial_cash)
 
-def fetch_ohlcv(symbol, timeframe="1h", limit=500):
+
+def fetch_ohlcv(symbol, timeframe="1h", limit=HISTORY_LIMIT):
+    """Latest *closed* candles. Kraken REST does not offer >720 historical OHLC bars."""
     exchange = ccxt.kraken({"enableRateLimit": True, "timeout": 20000})
-    raw = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-    if not raw or len(raw) < 120:
-        raise RuntimeError("Zu wenige Kursdaten erhalten.")
+    raw = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=min(int(limit), HISTORY_LIMIT))
+    if not raw or len(raw) < 250:
+        raise RuntimeError("Zu wenige Kursdaten: mindestens 250 Kerzen benötigt.")
     df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
     for col in ("open", "high", "low", "close", "volume"):
         df[col] = pd.to_numeric(df[col], errors="coerce")
-    # Die letzte Kerze kann noch offen sein: für Signale nur abgeschlossene Kerzen verwenden.
-    return df.iloc[:-1].dropna().reset_index(drop=True)
+    df = df.sort_values("timestamp").drop_duplicates("timestamp", keep="last")
+    # Kraken includes an unfinished current candle; omit it unconditionally.
+    df = df.iloc[:-1].dropna().reset_index(drop=True)
+    if len(df) < 240:
+        raise RuntimeError("Zu wenige abgeschlossene Kurskerzen.")
+    return df
+
 
 def _indicators(df):
     x = df.copy()
     x["ema_fast"] = x["close"].ewm(span=12, adjust=False).mean()
     x["ema_slow"] = x["close"].ewm(span=26, adjust=False).mean()
     delta = x["close"].diff()
-    gain = delta.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
-    loss = (-delta.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
+    gain = delta.clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=1 / 14, adjust=False).mean()
     rs = gain / loss.replace(0, np.nan)
-    x["rsi"] = 100 - (100 / (1 + rs))
+    x["rsi"] = (100 - (100 / (1 + rs))).where(loss != 0, 100.0)
+    x.loc[(loss == 0) & (gain == 0), "rsi"] = 50.0
     x["prior_high"] = x["high"].rolling(20).max().shift(1)
     x["prior_low"] = x["low"].rolling(20).min().shift(1)
     return x
+
 
 def _signals(df, strategy):
     x = _indicators(df)
     if strategy == "EMA Trend":
         entry = (x["ema_fast"] > x["ema_slow"]) & (x["ema_fast"].shift(1) <= x["ema_slow"].shift(1))
-        exit_ = (x["ema_fast"] < x["ema_slow"])
+        exit_ = x["ema_fast"] < x["ema_slow"]
     elif strategy == "RSI Reversal":
         entry = (x["rsi"] < 30) & (x["rsi"].shift(1) >= 30)
-        exit_ = (x["rsi"] > 55)
+        exit_ = x["rsi"] > 55
     elif strategy == "Breakout":
         entry = x["close"] > x["prior_high"]
         exit_ = x["close"] < x["prior_low"]
@@ -82,115 +105,173 @@ def _signals(df, strategy):
         raise ValueError(f"Unbekannte Strategie: {strategy}")
     return entry.fillna(False).to_numpy(dtype=bool), exit_.fillna(False).to_numpy(dtype=bool)
 
-def backtest(df, strategy, fee_rate=0.001):
-    """Long-only, all-in/all-out Modell; Signal auf Schlusskurs, Ausführung nächste Kerze."""
-    if len(df) < 150:
-        return None
-    entry_sig, exit_sig = _signals(df, strategy)
-    start = max(100, int(len(df) * 0.70))
-    cash = 1000.0
+
+def _period_backtest(df, entry_sig, exit_sig, start, end, fee_rate=0.001,
+                     slippage_rate=0.0005):
+    """Backtest with previous-close signals and next-bar-open fills.
+
+    We reset flat at the start of each period; an open position at the end
+    contributes to equity (net of hypothetical closing costs) but NOT to
+    the number of closed trades or profit factor. Intrabar stop is checked
+    before take-profit when both are touched; gaps use the worse open price.
+    """
+    if not (0 <= start < end <= len(df)):
+        raise ValueError("Ungültige Testgrenzen")
+    if not (0 <= fee_rate < 1 and 0 <= slippage_rate < 1):
+        raise ValueError("Ungültige Gebühren oder Slippage")
+    initial = 1000.0
+    cash = initial
     qty = 0.0
     entry_cost = 0.0
-    trades = []
-    equity_curve = []
-    for i in range(start, len(df) - 1):
-        row = df.iloc[i]
-        next_open = float(df.iloc[i + 1]["open"])
-        if qty == 0 and entry_sig[i]:
-            qty = cash / (next_open * (1 + fee_rate))
-            fee = qty * next_open * fee_rate
-            entry_cost = qty * next_open + fee
+    entry_price = 0.0
+    closed_pnls = []
+    equity_values = [initial]
+    for i in range(start, end):
+        bar = df.iloc[i]
+        bar_open = float(bar["open"])
+        bar_low = float(bar["low"])
+        bar_high = float(bar["high"])
+        bar_close = float(bar["close"])
+        if min(bar_open, bar_low, bar_high, bar_close) <= 0:
+            raise ValueError("Ungültige OHLC-Preise")
+        # Signal was known only *after* bar i-1 closed.
+        if i > 0 and qty > 0 and exit_sig[i - 1]:
+            sale_price = bar_open * (1 - slippage_rate)
+            proceeds = qty * sale_price * (1 - fee_rate)
+            cash = proceeds
+            closed_pnls.append(proceeds - entry_cost)
+            qty = 0.0
+            entry_cost = 0.0
+        elif i > start and qty == 0 and entry_sig[i - 1]:
+            buy_price = bar_open * (1 + slippage_rate)
+            qty = cash / (buy_price * (1 + fee_rate))
+            entry_price = buy_price
+            entry_cost = cash
             cash = 0.0
-            entry_price = next_open
-        elif qty > 0:
-            # Konservative Bar-Prüfung: Stop-Loss hat Vorrang, falls SL und TP in derselben Kerze berührt werden.
-            stop = entry_price * 0.98
-            take = entry_price * 1.04
-            low = float(row["low"])
-            high = float(row["high"])
-            exit_price = None
-            if low <= stop:
-                exit_price = stop
-            elif high >= take:
-                exit_price = take
-            elif exit_sig[i]:
-                exit_price = next_open
-            if exit_price is not None:
-                gross = qty * exit_price
-                fee = gross * fee_rate
-                cash = gross - fee
-                pnl = cash - entry_cost
-                trades.append(pnl)
+
+        if qty > 0:
+            stop, take = entry_price * 0.98, entry_price * 1.04
+            sale_price = None
+            if bar_open <= stop:
+                sale_price = bar_open * (1 - slippage_rate)
+            elif bar_low <= stop:
+                sale_price = stop * (1 - slippage_rate)
+            elif bar_open >= take:
+                sale_price = take * (1 - slippage_rate)  # conservative on gaps up
+            elif bar_high >= take:
+                sale_price = take * (1 - slippage_rate)
+            if sale_price is not None:
+                proceeds = qty * sale_price * (1 - fee_rate)
+                cash = proceeds
+                closed_pnls.append(proceeds - entry_cost)
                 qty = 0.0
                 entry_cost = 0.0
-        mark = cash if qty == 0 else qty * float(row["close"])
-        equity_curve.append(mark)
-    final_equity = cash if qty == 0 else qty * float(df.iloc[-1]["close"])
-    if qty > 0:
-        # Offene Position am Testende zum letzten Schlusskurs bewerten, nicht künstlich schließen.
-        trades.append(final_equity - entry_cost)
-    if not equity_curve:
-        return None
-    curve = pd.Series(equity_curve, dtype=float)
-    peak = curve.cummax()
-    drawdown = ((curve / peak) - 1.0).min() * 100
-    wins = sum(1 for t in trades if t > 0)
+        # Liquidation fee assumed for open positions to prevent optimistic equity.
+        equity_values.append(cash if qty == 0 else qty * bar_close * (1 - fee_rate - slippage_rate))
+
+    final_equity = equity_values[-1]
+    equity_curve = pd.Series(equity_values, dtype="float64")
+    max_dd = float((equity_curve / equity_curve.cummax() - 1).min() * 100)
+    gains = sum(max(p, 0.0) for p in closed_pnls)
+    losses = abs(sum(min(p, 0.0) for p in closed_pnls))
+    profit_factor = min(gains / losses, 99.0) if losses > 0 else (99.0 if gains > 0 else 0.0)
     return {
-        "strategy": strategy,
-        "test_return_pct": (final_equity / 1000.0 - 1.0) * 100,
-        "test_drawdown_pct": float(drawdown),
-        "test_trades": len(trades),
-        "win_rate_pct": (wins / len(trades) * 100) if trades else 0.0,
-        "profit_factor": (
-            sum(t for t in trades if t > 0) / abs(sum(t for t in trades if t < 0))
-            if any(t < 0 for t in trades) else (99.0 if any(t > 0 for t in trades) else 0.0)
-        ),
+        "return_pct": (final_equity / initial - 1) * 100,
+        "drawdown_pct": max_dd,
+        "closed_trades": len(closed_pnls),
+        "win_rate_pct": (100 * sum(p > 0 for p in closed_pnls) / len(closed_pnls)) if closed_pnls else 0.0,
+        "profit_factor": float(profit_factor),
+        "open_at_end": bool(qty > 0),
     }
 
+
+def rejection_reasons(metrics):
+    reasons = []
+    if metrics["closed_trades"] < MIN_TRADES:
+        reasons.append(f"Zu wenige abgeschlossene Trades ({metrics['closed_trades']}/{MIN_TRADES})")
+    if metrics["return_pct"] <= MIN_RETURN_PCT:
+        reasons.append(f"Rendite nicht positiv ({metrics['return_pct']:+.2f} %)")
+    if metrics["drawdown_pct"] <= MAX_DRAWDOWN_PCT:
+        reasons.append(f"Drawdown zu hoch ({metrics['drawdown_pct']:.2f} %)")
+    if metrics["profit_factor"] <= MIN_PROFIT_FACTOR:
+        reasons.append(f"Profit-Faktor zu niedrig ({metrics['profit_factor']:.2f})")
+    return reasons
+
+
 def evaluate_strategies(df, fee_rate=0.001):
+    """Chronological 40/40/20 training/validation/holdout split.
+
+    Strategies have fixed parameters (no fitting yet). Selection uses validation
+    only. Holdout is for an independent descriptive report, never selection.
+    Repeated rolling reviews eventually reuse the holdout, so this is not a
+    permanent truly-blind test or a guarantee of prospective performance.
+    """
+    n = len(df)
+    if n < 240:
+        raise ValueError("Zu kurze Historie für drei getrennte Testzeiträume")
+    train_end = int(n * 0.40)
+    validation_end = int(n * 0.80)
+    segments = {
+        "training": (0, train_end),
+        "validation": (train_end, validation_end),
+        "holdout": (validation_end, n),
+    }
     results = []
     for strategy in STRATEGIES:
-        result = backtest(df, strategy, fee_rate)
-        if result:
-            results.append(result)
-    # Keine Auswahl bei zu wenigen Trades oder negativem Out-of-sample-Ergebnis.
-    eligible = [r for r in results if r["test_trades"] >= 3 and r["test_return_pct"] > 0
-                and r["test_drawdown_pct"] > -15 and r["profit_factor"] > 1.05]
-    eligible.sort(key=lambda r: (r["test_return_pct"], r["profit_factor"]), reverse=True)
+        entry_sig, exit_sig = _signals(df, strategy)
+        result = {"strategy": strategy}
+        for name, (start, end) in segments.items():
+            result[name] = _period_backtest(df, entry_sig, exit_sig, start, end, fee_rate)
+        result["reasons"] = rejection_reasons(result["validation"])
+        results.append(result)
+    eligible = [r for r in results if not r["reasons"]]
+    eligible.sort(key=lambda r: (r["validation"]["return_pct"], r["validation"]["profit_factor"]), reverse=True)
     return results, (eligible[0] if eligible else None)
 
-def get_portfolio(initial_cash=100.0):
+
+def get_portfolio(initial_cash=100.0, prices=None):
     _init_db(initial_cash)
+    prices = prices or {}
     with _connect() as con:
         account = con.execute("SELECT * FROM account WHERE id=1").fetchone()
         rows = con.execute("SELECT * FROM positions").fetchall()
     positions = []
     market_value = 0.0
+    incomplete = False
     for row in rows:
+        price = prices.get(row["symbol"])
+        if price is None:
+            incomplete = True
+            marked = float(row["invested"])
+        else:
+            marked = float(row["qty"]) * float(price)
         positions.append({
             "Markt": row["symbol"], "Menge": row["qty"], "Einstieg": row["entry_price"],
-            "Investiert": row["invested"], "Strategie": row["strategy"],
-            "Status": "Offen"
+            "Investiert": row["invested"], "Marktwert (geschätzt)": round(marked, 2),
+            "Strategie": row["strategy"], "Status": "Offen",
         })
-        # Ohne aktuellen Preis wird konservativ der investierte Betrag als Näherung angezeigt.
-        market_value += row["invested"]
+        market_value += marked
     return {
         "cash": float(account["cash"]),
         "realized_pnl": float(account["realized_pnl"]),
         "open_positions": len(positions),
         "positions": positions,
         "equity": float(account["cash"]) + market_value,
+        "incomplete_pricing": incomplete,
     }
 
-def run_paper_cycle(symbol, df, strategy_name, fee_rate=0.001, initial_cash=100.0):
+
+def run_paper_cycle(symbol, df, strategy_name=None, fee_rate=0.001, initial_cash=100.0):
+    """One simulated action per new closed candle; *never* a real exchange order.
+
+    Existing positions are risk-checked even if current research has no winner.
+    Uses last closed price as an indicative fill; NOT a realistic live execution.
+    """
     _init_db(initial_cash)
     if len(df) < 2:
         return None
     last = df.iloc[-1]
     candle_ts = int(pd.Timestamp(last["timestamp"]).timestamp() * 1000)
-    entry_sig, exit_sig = _signals(df, strategy_name)
-    should_enter = bool(entry_sig[-1])
-    should_exit = bool(exit_sig[-1])
     price = float(last["close"])
     now = pd.Timestamp.now(tz="UTC").isoformat()
 
@@ -202,10 +283,10 @@ def run_paper_cycle(symbol, df, strategy_name, fee_rate=0.001, initial_cash=100.
         account = con.execute("SELECT * FROM account WHERE id=1").fetchone()
         cash = float(account["cash"])
         if pos:
+            # Do not replace exit strategy for an existing position mid-trade.
+            _, exit_sig = _signals(df, pos["strategy"])
             entry_price = float(pos["entry_price"])
-            stop_hit = price <= entry_price * 0.98
-            take_hit = price >= entry_price * 1.04
-            if should_exit or stop_hit or take_hit:
+            if bool(exit_sig[-1]) or price <= entry_price * 0.98 or price >= entry_price * 1.04:
                 qty = float(pos["qty"])
                 gross = qty * price
                 fee = gross * fee_rate
@@ -218,23 +299,26 @@ def run_paper_cycle(symbol, df, strategy_name, fee_rate=0.001, initial_cash=100.
                 con.execute("DELETE FROM positions WHERE symbol=?", (symbol,))
                 con.execute("INSERT OR REPLACE INTO processed(symbol,candle_ts) VALUES(?,?)", (symbol, candle_ts))
                 return f"VERKAUFT bei {price:.4f} · Ergebnis {pnl:+.2f} €"
-        elif should_enter and cash >= 10:
-            # Maximal 20 % des verfügbaren Cash pro Position; keine Kreditaufnahme/kein Hebel.
-            allocation = min(cash * 0.20, 20.0)
-            qty = allocation / (price * (1 + fee_rate))
-            cost = qty * price
-            fee = cost * fee_rate
-            total = cost + fee
-            if total <= cash:
-                con.execute("UPDATE account SET cash=cash-? WHERE id=1", (total,))
-                con.execute("INSERT OR REPLACE INTO positions(symbol,qty,entry_price,invested,opened_at,strategy) VALUES(?,?,?,?,?,?)",
-                            (symbol, qty, price, total, now, strategy_name))
-                con.execute("INSERT INTO trades(timestamp,symbol,side,price,qty,fee,pnl,strategy) VALUES(?,?,?,?,?,?,?,?)",
-                            (now, symbol, "BUY", price, qty, fee, None, strategy_name))
-                con.execute("INSERT OR REPLACE INTO processed(symbol,candle_ts) VALUES(?,?)", (symbol, candle_ts))
-                return f"GEKAUFT bei {price:.4f} · Einsatz {total:.2f} €"
+        elif strategy_name and cash >= 10:
+            entry_sig, _ = _signals(df, strategy_name)
+            if bool(entry_sig[-1]):
+                # Max 20% of available cash, and never more than €20 per entry.
+                allocation = min(cash * 0.20, 20.0)
+                qty = allocation / (price * (1 + fee_rate))
+                cost = qty * price
+                fee = cost * fee_rate
+                total = cost + fee
+                if total <= cash:
+                    con.execute("UPDATE account SET cash=cash-? WHERE id=1", (total,))
+                    con.execute("INSERT OR REPLACE INTO positions(symbol,qty,entry_price,invested,opened_at,strategy) VALUES(?,?,?,?,?,?)",
+                                (symbol, qty, price, total, now, strategy_name))
+                    con.execute("INSERT INTO trades(timestamp,symbol,side,price,qty,fee,pnl,strategy) VALUES(?,?,?,?,?,?,?,?)",
+                                (now, symbol, "BUY", price, qty, fee, None, strategy_name))
+                    con.execute("INSERT OR REPLACE INTO processed(symbol,candle_ts) VALUES(?,?)", (symbol, candle_ts))
+                    return f"GEKAUFT bei {price:.4f} · Einsatz {total:.2f} €"
         con.execute("INSERT OR REPLACE INTO processed(symbol,candle_ts) VALUES(?,?)", (symbol, candle_ts))
     return None
+
 
 def get_trade_history(limit=100):
     _init_db()
