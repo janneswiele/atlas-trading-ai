@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 DB_PATH = Path(os.getenv("ATLAS_DB_PATH", "atlas_trading.db"))
-SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+SYMBOLS = ["BTC/EUR", "ETH/EUR", "SOL/EUR"]
 STRATEGIES = ["EMA Trend", "RSI Reversal", "Breakout"]
 
 def _connect():
