@@ -2,7 +2,7 @@
 from __future__ import annotations
 import math
 import pandas as pd
-from .strategies import generate_signals
+from strategies import generate_signals
 
 
 def backtest(df, strategy, initial_cash=1000.0, fee_rate=0.001, slippage=0.0005,
