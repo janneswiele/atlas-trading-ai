@@ -2,8 +2,8 @@
 from __future__ import annotations
 from itertools import product
 import pandas as pd
-from .backtest import backtest
-from .strategies import STRATEGIES
+from backtest import backtest
+from strategies import STRATEGIES
 
 
 def candidates(strategy):
