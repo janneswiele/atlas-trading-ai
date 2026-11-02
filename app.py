@@ -1,195 +1,94 @@
-"""Atlas Trading AI 0.3 dashboard. Both app.py and engine.py must be updated together."""
-
+from __future__ import annotations
+from datetime import datetime, timedelta, timezone
+import time
 import pandas as pd
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
+from atlas.data import fetch_history, TIMEFRAME_MS
+from atlas.strategies import STRATEGIES
+from atlas.backtest import backtest
+from atlas.optimizer import run_walk_forward
 
-from engine import (
-    HISTORY_LIMIT,
-    SYMBOLS,
-    STRATEGIES,
-    evaluate_strategies,
-    fetch_ohlcv,
-    get_portfolio,
-    get_trade_history,
-    reset_paper_account,
-    run_paper_cycle,
-)
-
-st.set_page_config(page_title="Atlas Trading AI 0.3", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Atlas Trading AI", page_icon="📈", layout="wide")
 st.title("📈 Atlas Trading AI")
-st.caption("Version 0.3 · Kraken-Marktdaten · Historische Strategieprüfung · Nur Paper-Trading")
-
+st.caption("Meilenstein 1 · historische Spot-Simulation · Echtgeldhandel nicht implementiert")
 with st.sidebar:
-    st.header("Einstellungen")
-    symbols = st.multiselect("Märkte", SYMBOLS, default=SYMBOLS)
-    timeframe = st.selectbox("Zeiteinheit", ["15m", "1h", "4h"], index=1)
-    initial_cash = st.number_input("Startkapital (virtuell, €)", 10.0, 10000.0, 100.0, 10.0)
-    fee_pct = st.number_input("Gebühr je Order (%)", 0.0, 2.0, 0.1, 0.05)
-    st.caption("Marktdaten von Kraken · Keine API-Schlüssel oder echten Orders")
-    if st.button("Paper-Konto zurücksetzen", type="secondary"):
-        reset_paper_account(float(initial_cash))
-        st.success("Paper-Konto zurückgesetzt.")
-    st.caption("Hinweis: Auf Streamlit Community Cloud können Paper-Daten bei Neustarts verloren gehen.")
+    st.header("Backtest")
+    exchange=st.selectbox("Datenquelle",["okx","kraken"],help="OKX wird für paginierte Historien bevorzugt. Kraken OHLC-Endpunkte können auf ein rollierendes Fenster begrenzt sein.")
+    symbol=st.selectbox("Markt",["BTC/USDT","ETH/USDT","SOL/USDT"])
+    timeframe=st.selectbox("Intervall",list(TIMEFRAME_MS),index=1)
+    years=st.slider("Historie in Jahren",0.25,5.0,2.0,0.25)
+    start_cash=st.number_input("Virtuelles Startkapital",100.0,100000.0,1000.0,100.0)
+    fee_pct=st.number_input("Gebühr je Fill (%)",0.0,1.0,0.1,0.01)
+    slippage_pct=st.number_input("Slippage je Fill (%)",0.0,1.0,0.05,0.01)
+    chosen=st.multiselect("Strategien",STRATEGIES,default=STRATEGIES)
+    run=st.button("Historische Tests starten",type="primary",use_container_width=True)
 
-if not symbols:
-    st.warning("Bitte mindestens einen Markt auswählen.")
-    st.stop()
-
-fee_rate = float(fee_pct) / 100.0
-
-
-@st.cache_data(ttl=90, show_spinner=False)
-def cached_prices(symbol, timeframe, limit):
-    return fetch_ohlcv(symbol, timeframe, limit)
-
-
-st.subheader("Marktdaten & Strategie-Auswahl")
-st.caption(
-    "Je Markt maximal 720 Kerzen von Kraken (die jüngste unvollständige Kerze wird entfernt). "
-    "Zeitliche Aufteilung: 40 % Training · 40 % Validierung · 20 % Holdout. "
-    "Auswahl ausschließlich nach Validierung; der Holdout wird nur berichtet."
-)
-
-market_rows, diagnostic_rows, prices, frames, winners, errors = [], [], {}, {}, {}, []
-for symbol in symbols:
+st.info("Diese Version führt historische Tests aus. Live-Paper-Trading, Optimierung und Echtgeldanbindung sind noch nicht enthalten.")
+if run:
+    end=int(time.time()*1000); start=end-int(years*365.25*24*60*60*1000)
     try:
-        df = cached_prices(symbol, timeframe, HISTORY_LIMIT)
-        frames[symbol] = df
-        prices[symbol] = float(df["close"].iloc[-1])
-        results, winner = evaluate_strategies(df, fee_rate)
-        winners[symbol] = winner
-        market_rows.append({
-            "Markt": symbol,
-            "Letzter Schlusskurs (€)": round(prices[symbol], 4),
-            "Kerzen": len(df),
-            "Ausgewählt (Validierung)": winner["strategy"] if winner else "Keine",
-            "Validierung (%)": round(winner["validation"]["return_pct"], 2) if winner else None,
-            "Holdout (%)": round(winner["holdout"]["return_pct"], 2) if winner else None,
-        })
-        for res in results:
-            train, val, test = res["training"], res["validation"], res["holdout"]
-            diagnostic_rows.append({
-                "Markt": symbol,
-                "Strategie": res["strategy"],
-                "Validierungsstatus": "Zugelassen" if not res["reasons"] else "Abgelehnt",
-                "Training (%)": round(train["return_pct"], 2),
-                "Validierung (%)": round(val["return_pct"], 2),
-                "Holdout (%)": round(test["return_pct"], 2),
-                "Trades Validierung": val["closed_trades"],
-                "Trades Holdout": test["closed_trades"],
-                "Trefferquote Val. (%)": round(val["win_rate_pct"], 1),
-                "Drawdown Val. (%)": round(val["drawdown_pct"], 2),
-                "Profit-Faktor Val.": round(val["profit_factor"], 2),
-                "Offen am Val.-Ende": "Ja" if val["open_at_end"] else "Nein",
-                "Grund für Ablehnung": "; ".join(res["reasons"]) if res["reasons"] else "—",
-            })
-    except Exception as exc:
-        errors.append(f"{symbol}: {exc}")
+        with st.spinner("Lade historische Kerzen mit Pagination …"):
+            df,info=fetch_history(exchange,symbol,timeframe,start,end)
+        st.session_state["df"]=df; st.session_state["info"]=info
+        st.session_state["run_cfg"]={"exchange":exchange,"symbol":symbol,"timeframe":timeframe,"fee":fee_pct/100,"slippage":slippage_pct/100,"cash":start_cash,"strategies":chosen}
+    except Exception as e:
+        st.error(f"Datenabruf fehlgeschlagen: {e}")
 
-for error in errors:
-    st.warning(error)
-if market_rows:
-    st.dataframe(pd.DataFrame(market_rows), hide_index=True, use_container_width=True)
-else:
-    st.error("Keine Kursdaten geladen. Bitte API-Verbindung prüfen.")
-
-st.subheader("Backtest-Diagnose 0.3")
-st.write("**Alle getesteten Strategien:** Auswahl nur nach Validierungsdaten; Holdout-Spalte separat zur Einordnung.")
-if diagnostic_rows:
-    st.dataframe(pd.DataFrame(diagnostic_rows), hide_index=True, use_container_width=True)
-    st.caption(
-        "Trades zählen nur vollständig geschlossene Positionen. Offene Positionen werden für die "
-        "Rendite zum letzten Schlusskurs abzüglich geschätzter Verkaufskosten bewertet, aber nicht "
-        "als geschlossene Trades gezählt. Einstiege nach Signal am Vortag/Vor-Kerzenschluss, "
-        "Ausführung zum nächsten Kerzen-Open; Stop-Loss/Take-Profit intrabar konservativ "
-        "modelliert. 0,05 % Slippage pro simuliertem Fill zusätzlich zu den eingestellten Gebühren."
-    )
-    if not any(winners.values()):
-        st.info("Keine Strategie erfüllt derzeit die Validierungsfilter. Das ist kein Programmfehler; neue Käufe bleiben aus.")
+if "df" in st.session_state:
+    df=st.session_state["df"]; info=st.session_state["info"]; cfg=st.session_state["run_cfg"]
+    if cfg["strategies"]:
+        st.subheader("Historische Daten")
+        a,b,c,d=st.columns(4)
+        a.metric("Gültige Kerzen",f"{info['valid_candles']:,}")
+        b.metric("Fehlende Intervalle",info["missing_intervals"])
+        bdate=lambda v: datetime.fromtimestamp(v/1000,timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if v else "—"
+        c.metric("Früheste Kerze",bdate(info["first"]))
+        d.metric("Neueste Kerze",bdate(info["last"]))
+        if info["warnings"]:
+            for w in info["warnings"]: st.warning(w)
+        if info["candles"]<300: st.warning("Historie is korter dan 300 kerzen. Ergebnisse können statistisch schwach sein.")
+        st.caption(f"Quelle {info['exchange']} · {info['symbol']} · {info['timeframe']} · {info['candles']:,} Kerzen · API neu: {info['api_rows_fetched']:,} · Cache wiederverwendet: {info['cache_rows_reused']:,}")
+        n=len(df); cuts=(int(n*.6),int(n*.8)); rows=[]; all_trades=[]; diagnostics=[]
+        for strategy in cfg["strategies"]:
+            segments={"Training":(0,cuts[0]),"Validierung":(cuts[0],cuts[1]),"Test (Holdout)":(cuts[1],n)}
+            by={}
+            for label,(lo,hi) in segments.items():
+                # Indicators use only historical rows. Segment portfolio resets at each boundary.
+                m,t,e,dg=backtest(df,strategy,cfg["cash"],cfg["fee"],cfg["slippage"],start_index=lo,end_index=hi,timeframe=cfg["timeframe"])
+                by[label]=m
+                if label=="Test (Holdout)":
+                    t["market"]=cfg["symbol"]; all_trades.append(t)
+                    state=("Keine Einstiegssignale" if dg["entry_conditions"]==0 else "Signale vorhanden, keine Ausführung" if m["trades"]==0 else "Trades simuliert")
+                    diagnostics.append({"Strategie":strategy,"Status":state,"Kerzen geprüft":dg["candles_evaluated"],"Einstiegssignale":dg["entry_conditions"],"Ausstiegssignale":dg["exit_conditions"],"Risiko-Ablehnungen":dg["risk_rejections"],"Simulierte Trades":m["trades"],"Stop-Loss":dg["stop_hits"],"Take-Profit":dg["take_hits"]})
+            test=by["Test (Holdout)"]
+            status="Ausreichende Mindeststichprobe" if test["trades"]>=30 else "Zu wenige Trades für belastbare Einstufung"
+            train=by["Training"]; val=by["Validierung"]
+            rows.append({"Strategie":strategy,"Training Trades":train["trades"],"Validierung Trades":val["trades"],"Holdout Trades":test["trades"],"Holdout Trefferquote":f"{test['win_rate_pct']:.1f}%","Holdout Netto":f"{test['net_pnl']:+.2f}","Holdout Rendite":f"{test['return_pct']:+.2f}%","Buy & Hold":f"{test['buy_hold_return_pct']:+.2f}%","Max. Drawdown":f"{test['max_drawdown_pct']:.2f}%","Profit Factor":f"{test['profit_factor']:.2f}","Status":status})
+        st.subheader("Holdout-Ergebnisse")
+        st.dataframe(pd.DataFrame(rows),hide_index=True,use_container_width=True)
+        st.caption("Zeitaufteilung: 60% Training · 20% Validierung · 20% Holdout. Feste Startparameter, keine Optimierung. Signale am Kerzenschluss werden frühestens am nächsten Kerzen-Open ausgeführt. Positionszustand und Eigenkapital starten je Segment neu; die Indikator-Warm-up-Daten stammen ausschließlich aus der Vergangenheit.")
+        with st.expander("Erweiterte Forschung: Walk-forward-Parametersuche"):
+            st.write("Je Zeitfenster werden begrenzte Parameterkombinationen nur auf älteren Trainingsdaten gerankt und danach auf dem folgenden, getrennten Zeitfenster geprüft. Diese Auswertung wählt keine Strategie für den Live- oder Paper-Betrieb aus.")
+            folds=st.slider("Walk-forward-Fenster",2,6,4)
+            if st.button("Walk-forward-Tests berechnen"):
+                wf=[]
+                with st.spinner("Teste Parameter je historischem Zeitfenster …"):
+                    for strategy in cfg["strategies"]:
+                        try:
+                            summary=run_walk_forward(df,strategy,cfg["cash"],cfg["fee"],cfg["slippage"],cfg["timeframe"],folds=folds)
+                            wf.append({"Strategie":strategy,"Ausgewertete Fenster":f"{summary['folds_evaluated']}/{folds}","OOS-Trades":summary["total_oos_trades"],"Ø OOS-Rendite":None if summary["mean_oos_return_pct"] is None else round(summary["mean_oos_return_pct"],2),"schlechtester OOS-Drawdown":None if summary["worst_oos_drawdown_pct"] is None else round(summary["worst_oos_drawdown_pct"],2)})
+                            st.dataframe(pd.DataFrame([{**r,"Parameter im Fold":r["params"]} for r in summary["fold_results"]]),hide_index=True,use_container_width=True)
+                        except Exception as exc:
+                            st.warning(f"{strategy}: {exc}")
+                if wf: st.dataframe(pd.DataFrame(wf),hide_index=True,use_container_width=True)
+        st.subheader("Diagnose")
+        st.dataframe(pd.DataFrame(diagnostics),hide_index=True,use_container_width=True)
+        if all_trades and len(all_trades[0]):
+            trades=pd.concat(all_trades,ignore_index=True)
+            st.subheader("Holdout-Trades")
+            st.dataframe(trades,hide_index=True,use_container_width=True)
+            st.download_button("Trades als CSV herunterladen",trades.to_csv(index=False),file_name="atlas_holdout_trades.csv",mime="text/csv")
+        st.line_chart(df.set_index(pd.to_datetime(df.timestamp,unit="ms",utc=True)).close.rename("Schlusskurs"))
+        st.caption("Noch offene Forschungsgrenzen: Parameteroptimierung, Walk-forward-Validierung, ausführliche Marktregimeanalyse und permanentes Paper-Trading kommen in Folgemeilensteinen. Keine Strategieauswahl wird als Gewinnversprechen dargestellt.")
     else:
-        st.warning(
-            "Ein positives Validierungsergebnis ist kein Beweis für Profitabilität. "
-            "Besonders bei wenigen Trades bleiben die Ergebnisse unsicher."
-        )
-else:
-    st.info("Noch keine Testergebnisse verfügbar.")
-
-with st.expander("Wie funktionieren die Tests und warum lehnt Atlas ab?"):
-    st.markdown(
-        "**Training (40 %):** rückblickende Referenz; Strategieparameter sind in dieser "
-        "Version fest vorgegeben. **Validierung (40 %):** einzige Basis der Strategieauswahl. "
-        "**Holdout (20 %):** nachgelagerter Bericht, der nicht zur Auswahl verwendet wird. "
-        "Jeder Abschnitt startet ohne offene Position. Die Indikatoren verwenden nur vergangene "
-        "Kursdaten. Die Zeitfenster wandern beim täglichen Einsatz weiter: Ein wiederholt "
-        "eingesehener Holdout ist deshalb kein dauerhaft blinder Zukunftstest."
-    )
-    st.markdown(
-        "Für eine Freigabe auf **Validierungsdaten** gelten weiterhin: mindestens "
-        "**3 geschlossene Trades**, **positive Rendite**, Drawdown **größer als −15 %** "
-        "und Profit-Faktor **über 1,05**. Bei Gleichstand gewinnt die höchste "
-        "Validierungsrendite, nicht der Holdout."
-    )
-
-st.divider()
-st.subheader("Paper-Trading")
-st.write(
-    "Die Handelssimulation verwendet die zuletzt abgeschlossene Kerze. "
-    "Existierende Positionen werden auch dann auf Ausstieg geprüft, wenn gerade "
-    "keine neue Strategie zugelassen wird."
-)
-run_now = st.button("▶ Paper-Bot jetzt ausführen", type="primary")
-auto = st.toggle("Automatisch alle 60 Sekunden prüfen (nur bei geöffneter Sitzung)", value=False)
-if auto:
-    st_autorefresh(interval=60_000, key="atlas_auto_refresh")
-
-if run_now or auto:
-    actions = []
-    for symbol, df in frames.items():
-        winner = winners.get(symbol)
-        try:
-            action = run_paper_cycle(
-                symbol=symbol, df=df,
-                strategy_name=winner["strategy"] if winner else None,
-                fee_rate=fee_rate, initial_cash=float(initial_cash),
-            )
-            if action:
-                actions.append(f"{symbol}: {action}")
-        except Exception as exc:
-            st.error(f"Handelssimulation bei {symbol}: {exc}")
-    if actions:
-        for action in actions:
-            st.success(action)
-    elif run_now:
-        st.info(
-            "Keine Aktion: Entweder wurde keine Strategie freigegeben, es gibt kein neues "
-            "Kauf-/Verkaufssignal oder die abgeschlossene Kerze wurde schon verarbeitet."
-        )
-
-portfolio = get_portfolio(float(initial_cash), prices=prices)
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Virtuelles Guthaben", f'{portfolio["cash"]:.2f} €')
-c2.metric("Offene Positionen", str(portfolio["open_positions"]))
-c3.metric("Realisierter Gewinn/Verlust", f'{portfolio["realized_pnl"]:+.2f} €')
-c4.metric("Geschätzter Kontowert", f'{portfolio["equity"]:.2f} €')
-if portfolio["positions"]:
-    st.markdown("**Offene Paper-Positionen**")
-    st.dataframe(pd.DataFrame(portfolio["positions"]), hide_index=True, use_container_width=True)
-if portfolio["incomplete_pricing"]:
-    st.warning("Für mindestens eine offene Position fehlt ein aktueller Kurs; deren Bewertung ist nur eine Näherung.")
-
-st.divider()
-st.subheader("Trade-Verlauf")
-history = get_trade_history()
-if history:
-    st.dataframe(pd.DataFrame(history), hide_index=True, use_container_width=True)
-else:
-    st.info("Noch keine simulierten Trades.")
-
-st.caption(
-    "Achtung: Backtests und Paper-Trades sind keine Gewinnprognose. "
-    "Paper-Fills zum Schlusskurs sind nicht mit echten, handelbaren Ausführungen gleichzusetzen. "
-    "Auf Streamlit Community Cloud keine garantierte 24/7-Ausführung, keine gesicherte "
-    "dauerhafte SQLite-Speicherung. Bei öffentlicher App ist das Paper-Konto für "
-    "Besucher gemeinsam nutzbar und zurücksetzbar. Echtgeld-Orders technisch nicht vorhanden."
-)
+        st.warning("Wähle mindestens eine Strategie aus und starte die Tests erneut.")
