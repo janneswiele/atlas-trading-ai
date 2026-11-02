@@ -3,10 +3,10 @@ from datetime import datetime, timedelta, timezone
 import time
 import pandas as pd
 import streamlit as st
-from atlas.data import fetch_history, TIMEFRAME_MS
-from atlas.strategies import STRATEGIES
-from atlas.backtest import backtest
-from atlas.optimizer import run_walk_forward
+from data import fetch_history, TIMEFRAME_MS
+from strategies import STRATEGIES
+from backtest import backtest
+from optimizer import run_walk_forward
 
 st.set_page_config(page_title="Atlas Trading AI", page_icon="📈", layout="wide")
 st.title("📈 Atlas Trading AI")
