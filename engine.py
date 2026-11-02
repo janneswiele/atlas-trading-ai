@@ -43,7 +43,7 @@ def reset_paper_account(initial_cash=100.0):
     _init_db(initial_cash)
 
 def fetch_ohlcv(symbol, timeframe="1h", limit=500):
-    exchange = ccxt.binance({"enableRateLimit": True, "timeout": 20000})
+    exchange = ccxt.kraken({"enableRateLimit": True, "timeout": 20000})
     raw = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
     if not raw or len(raw) < 120:
         raise RuntimeError("Zu wenige Kursdaten erhalten.")
