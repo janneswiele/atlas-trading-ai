@@ -1,0 +1,160 @@
+
+name: Atlas Autonomes Paper Trading
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */4 * * *"
+permissions:
+  contents: write
+concurrency:
+  group: atlas-paper
+  cancel-in-progress: false
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Virtuellen Handelszyklus ausführen
+        run: |
+          python - <<'PYTHON'
+          import csv
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          STATE = Path('paper_state.json')
+          HISTORY = Path('paper_trades.csv')
+          PAIR = 'XBTEUR'
+          FEE, SLIPPAGE, ALLOCATION = 0.001, 0.0005, 0.20
+
+          def get_data(endpoint, extra=""):
+              url = 'https://api.kraken.com/0/public/' + endpoint + '?pair=' + PAIR + extra
+              with urlopen(Request(url, headers={'User-Agent': 'Atlas-Paper-Demo/1.0'}), timeout=30) as r:
+                  payload = json.load(r)
+              if payload.get('error'):
+                  raise RuntimeError(str(payload['error']))
+              values = [v for k, v in payload['result'].items() if k != 'last']
+              if len(values) != 1:
+                  raise RuntimeError('Kraken-Datenformat unerwartet')
+              return values[0]
+
+          def signal(prices):
+              def avg(n, offset=0):
+                  return sum(prices[len(prices)-n-offset:len(prices)-offset if offset else None]) / n
+              short_old, long_old = avg(20, 1), avg(50, 1)
+              short_now, long_now = avg(20), avg(50)
+              return (short_old <= long_old and short_now > long_now,
+                      short_old >= long_old and short_now < long_now)
+
+          def main():
+              candles = get_data('OHLC', '&interval=240')[:-1]
+              if len(candles) < 51:
+                  raise RuntimeError('Zu wenige abgeschlossene Kurskerzen')
+              ts = int(candles[-1][0])
+              prices = [float(x[4]) for x in candles]
+              if any(p <= 0 for p in prices):
+                  raise RuntimeError('Ungültige Kursdaten')
+              now = int(datetime.now(timezone.utc).timestamp())
+              if not (0 <= now - (ts + 240 * 60) <= 240 * 60):
+                  raise RuntimeError('Letzte Kerze ist zu alt oder liegt in der Zukunft')
+
+              state = json.loads(STATE.read_text()) if STATE.exists() else {
+                  'cash_eur': 100.0, 'btc': 0.0,
+                  'entry_eur': None, 'last_ts': 0
+              }
+              if state['cash_eur'] < 0 or state['btc'] < 0:
+                  raise RuntimeError('Ungültiger Kontostand')
+              if state['last_ts'] >= ts:
+                  print('Keine neue abgeschlossene 4h-Kerze')
+                  return
+
+              last_price = float(get_data('Ticker')['c'][0])
+              if last_price <= 0:
+                  raise RuntimeError('Ungültiger Tickerpreis')
+
+              go_long, go_flat = signal(prices)
+              cash, btc = float(state['cash_eur']), float(state['btc'])
+              entry = state['entry_eur']
+              row = None
+              message = 'Halten: kein Signal'
+              when = datetime.now(timezone.utc).isoformat(timespec='seconds')
+
+              if btc > 0 and (
+                  go_flat or last_price <= entry * .98
+                  or last_price >= entry * 1.04
+              ):
+                  fill = last_price * (1 - SLIPPAGE)
+                  fee = btc * fill * FEE
+                  cash += btc * fill - fee
+                  message = (
+                      'SMA-Verkauf' if go_flat else
+                      ('Demo-Stop' if last_price <= entry * .98
+                       else 'Demo-Gewinnziel')
+                  )
+                  row = [when, 'SELL', fill, btc, fee, message]
+                  btc, entry = 0.0, None
+
+              elif btc == 0 and go_long and cash >= 10:
+                  fill = last_price * (1 + SLIPPAGE)
+                  budget = cash * ALLOCATION
+                  qty = budget / (fill * (1 + FEE))
+                  fee = qty * fill * FEE
+                  cash -= qty * fill + fee
+                  btc, entry = qty, fill
+                  message = 'SMA-Kauf'
+                  row = [when, 'BUY', fill, qty, fee, message]
+
+              state = {
+                  'cash_eur': round(cash, 8),
+                  'btc': round(btc, 12),
+                  'entry_eur': entry,
+                  'last_ts': ts,
+                  'last_price_eur': last_price,
+                  'equity_eur': round(cash + btc * last_price, 6),
+                  'last_checked_utc': when,
+                  'last_result': message,
+                  'strategy': 'SMA20/50 Demo (nicht validiert)'
+              }
+              STATE.write_text(
+                  json.dumps(state, ensure_ascii=False, indent=2) + '\n'
+              )
+
+              if row:
+                  is_new = not HISTORY.exists()
+                  with HISTORY.open('a', newline='') as f:
+                      writer = csv.writer(f)
+                      if is_new:
+                          writer.writerow([
+                              'time_utc', 'side', 'fill_eur',
+                              'qty_btc', 'fee_eur', 'reason'
+                          ])
+                      writer.writerow(row)
+
+              print(
+                  f'Atlas Paper: {message}; '
+                  f'Kontowert {state["equity_eur"]:.2f} EUR; '
+                  f'Kurs {last_price:.2f} EUR'
+              )
+
+          if __name__ == '__main__':
+              main()
+          PYTHON
+
+      - name: Virtuelles Konto speichern
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add paper_state.json 2>/dev/null || true
+          if [ -f paper_trades.csv ]; then
+            git add paper_trades.csv
+          fi
+          if ! git diff --cached --quiet; then
+            git commit -m "Update Atlas paper simulation"
+            git push
+          fi
