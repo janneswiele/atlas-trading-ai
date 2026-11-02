@@ -1,0 +1,11 @@
+services:
+  atlas-trading-ai:
+    build: .
+    container_name: atlas-trading-ai
+    ports:
+      - "8501:8501"
+    volumes:
+      - atlas-data:/data
+    restart: unless-stopped
+volumes:
+  atlas-data:
