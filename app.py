@@ -92,3 +92,30 @@ if "df" in st.session_state:
         st.caption("Noch offene Forschungsgrenzen: Parameteroptimierung, Walk-forward-Validierung, ausführliche Marktregimeanalyse und permanentes Paper-Trading kommen in Folgemeilensteinen. Keine Strategieauswahl wird als Gewinnversprechen dargestellt.")
     else:
         st.warning("Wähle mindestens eine Strategie aus und starte die Tests erneut.")
+
+# Atlas: automatisches Paper-Trading-Konto
+import json
+from urllib.request import urlopen
+
+st.divider()
+st.subheader("🤖 Automatischer Paper-Bot")
+
+try:
+    state_url = (
+        "https://raw.githubusercontent.com/"
+        "janneswiele/atlas-trading-ai/main/paper_state.json"
+    )
+    with urlopen(state_url, timeout=10) as response:
+        paper = json.load(response)
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Kontowert", f"{paper['equity_eur']:.2f} €")
+    col2.metric("Guthaben", f"{paper['cash_eur']:.2f} €")
+    col3.metric("BTC-Bestand", f"{paper['btc']:.8f}")
+
+    st.info(f"Letzte Entscheidung: {paper['last_result']}")
+    st.caption(
+        f"Letzte Prüfung (UTC): {paper['last_checked_utc']}"
+    )
+except Exception as exc:
+    st.warning(f"Paper-Konto derzeit nicht abrufbar: {exc}")
