@@ -16,6 +16,8 @@ def candidates(strategy):
     if strategy == "Breakout":
         return [{"lookback": n, "volume_factor": v}
                 for n,v in product((15,20,30),(0.8,1.0,1.2))]
+    if strategy == "SMA 20/50":
+        return [{}]
     raise ValueError(f"Unbekannte Strategie: {strategy}")
 
 

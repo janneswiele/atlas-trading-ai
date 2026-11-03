@@ -1,0 +1,11 @@
+{
+  "trading_enabled": true,
+  "max_allocation": 0.2,
+  "max_positions": 1,
+  "fee_rate": 0.001,
+  "slippage": 0.0005,
+  "max_drawdown": 0.1,
+  "daily_loss_limit": 0.03,
+  "stop_loss": 0.02,
+  "take_profit": 0.04
+}

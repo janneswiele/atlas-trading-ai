@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
-from atlas.optimizer import candidates, run_walk_forward
-from atlas.data import TIMEFRAME_MS
+from optimizer import candidates, run_walk_forward
+from data import TIMEFRAME_MS
 
 
 def test_candidate_sets_are_valid_and_bounded():

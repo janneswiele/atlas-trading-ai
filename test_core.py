@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
-from atlas.backtest import backtest
-from atlas.data import normalize, validate_frame, TIMEFRAME_MS
+from backtest import backtest
+from data import normalize, validate_frame, TIMEFRAME_MS
 
 
 def candles(n=300):
@@ -39,7 +39,7 @@ def test_invalid_costs_rejected():
 
 
 def test_signal_executes_at_next_open_and_stop_wins_intrabar(monkeypatch):
-    import atlas.backtest as engine
+    import backtest as engine
     frame=pd.DataFrame([
         {"timestamp":1,"open":100,"high":101,"low":99,"close":100,"volume":10},
         {"timestamp":2,"open":110,"high":111,"low":109,"close":110,"volume":10},
@@ -55,7 +55,7 @@ def test_signal_executes_at_next_open_and_stop_wins_intrabar(monkeypatch):
 
 
 def test_history_pagination_fetches_multiple_pages_and_caches(tmp_path):
-    from atlas.data import fetch_history
+    from data import fetch_history
     step=TIMEFRAME_MS["1h"]; base=1_700_000_000_000
     rows=[[base+i*step,100,102,99,101,10] for i in range(5)]
     class FakeExchange:
@@ -78,3 +78,29 @@ def test_history_pagination_fetches_multiple_pages_and_caches(tmp_path):
                              exchange_factory=FakeExchange)
     assert len(df2)==5 and info2["cache_rows_reused"]==5
     assert len(FakeExchange.calls)==3
+
+
+def test_entry_bar_stop_is_processed(monkeypatch):
+    import backtest as engine
+    frame=pd.DataFrame([
+        {'timestamp':1,'open':100,'high':101,'low':99,'close':100,'volume':10},
+        {'timestamp':2,'open':100,'high':110,'low':90,'close':100,'volume':10},
+    ])
+    ind=frame.copy();ind['atr']=1.
+    monkeypatch.setattr(engine,'generate_signals',lambda *args:(pd.Series([True,False]),pd.Series([False,False]),ind,'test'))
+    _,t,_,_=engine.backtest(frame,'EMA Trend',fee_rate=0,slippage=0)
+    assert t.iloc[0].exit_reason.startswith('Stop-Loss') and t.iloc[0].exit_price==98
+
+def test_unfinished_candle_not_cached(tmp_path):
+    from data import fetch_history,cache_read
+    step=TIMEFRAME_MS['1h'];base=1_700_000_000_000
+    class Fake:
+        has={'fetchOHLCV':True}
+        def __init__(self,config): pass
+        def milliseconds(self): return base+step+10
+        def fetch_ohlcv(self,symbol,timeframe,since,limit):
+            return [r for r in [[base,100,102,99,101,10],[base+step,100,102,99,101,10]] if r[0]>=since]
+    p=tmp_path/'cache.sqlite'
+    fetch_history('fake','BTC/USDT','1h',base,base+2*step,cache_path=p,exchange_factory=Fake)
+    cached=cache_read(p,'fake','BTC/USDT','1h')
+    assert cached.timestamp.tolist()==[base]

@@ -45,9 +45,15 @@ def generate_signals(df, name, params=None):
         enter = (x.close > prior_high) & (x.volume > volume_avg*volume_factor)
         exit_ = x.close < prior_low
         why = f"Schlusskurs über vorherigem {lookback}-Kerzen-Hoch mit Volumenbestätigung"
+    elif name == "SMA 20/50":
+        fast = x.close.rolling(20).mean()
+        slow = x.close.rolling(50).mean()
+        enter = (fast > slow) & (fast.shift(1) <= slow.shift(1))
+        exit_ = (fast < slow) & (fast.shift(1) >= slow.shift(1))
+        why = "SMA20 kreuzt SMA50 nach oben"
     else:
         raise ValueError(f"Unbekannte Strategie: {name}")
     return enter.fillna(False).astype(bool), exit_.fillna(False).astype(bool), x, why
 
 
-STRATEGIES = ["EMA Trend", "RSI Reversion", "Breakout"]
+STRATEGIES = ["EMA Trend", "RSI Reversion", "Breakout", "SMA 20/50"]
