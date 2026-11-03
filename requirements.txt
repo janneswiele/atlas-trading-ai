@@ -1,5 +1,5 @@
 ccxt==4.5.91
 numpy==2.3.5
-pandas==2.2.3
+pandas==2.3.3
 streamlit==1.66.1
 pytest==9.2.0
