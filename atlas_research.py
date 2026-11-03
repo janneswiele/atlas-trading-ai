@@ -73,7 +73,7 @@ def _fetch_window(start: int, stop: int, request_fn=urlopen, sleep_fn=time.sleep
 
 
 def fetch_history(now: int, days: int, fetch_fn=_fetch_window, sleep_fn=time.sleep):
-       if isinstance(days, bool) or not isinstance(days, int) or not 168 <= days <= 365:
+    if isinstance(days, bool) or not isinstance(days, int) or not 168 <= days <= 365:
         raise ValueError('History must be 168-365 whole days')
     # Align both ends to complete UTC four-hour sessions.
     right = (int(now) // STEP) * STEP
