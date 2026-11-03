@@ -2,10 +2,10 @@
   "cash_eur": 100.0,
   "btc": 0.0,
   "entry_eur": null,
-  "last_ts": 1793635200,
-  "last_price_eur": 68640.0,
+  "last_ts": 1793649600,
+  "last_price_eur": 68913.1,
   "equity_eur": 100.0,
-  "last_checked_utc": "2026-11-02T20:50:24+00:00",
+  "last_checked_utc": "2026-11-03T01:06:36+00:00",
   "last_result": "Halten: kein Signal",
   "strategy": "SMA20/50 Demo (nicht validiert)"
 }
