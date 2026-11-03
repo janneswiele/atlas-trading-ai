@@ -10,7 +10,11 @@ from optimizer import run_walk_forward
 
 st.set_page_config(page_title="Atlas Trading AI", page_icon="📈", layout="wide")
 st.title("📈 Atlas Trading AI")
-st.caption("Meilenstein 1 · historische Spot-Simulation · Echtgeldhandel nicht implementiert")
+st.caption("Version 0.4 · Forschung und autonomes Paper-Konto · kein Echtgeldhandel")
+from paper_dashboard import render
+render()
+st.divider()
+st.header("Historische Forschung")
 with st.sidebar:
     st.header("Backtest")
     exchange=st.selectbox("Datenquelle",["okx","kraken"],help="OKX wird für paginierte Historien bevorzugt. Kraken OHLC-Endpunkte können auf ein rollierendes Fenster begrenzt sein.")
@@ -23,7 +27,7 @@ with st.sidebar:
     chosen=st.multiselect("Strategien",STRATEGIES,default=STRATEGIES)
     run=st.button("Historische Tests starten",type="primary",use_container_width=True)
 
-st.info("Diese Version führt historische Tests aus. Live-Paper-Trading, Optimierung und Echtgeldanbindung sind noch nicht enthalten.")
+st.info("Diese historischen Tests sind Forschung und ändern weder das Paper-Konto noch dessen Strategiefreigabe.")
 if run:
     end=int(time.time()*1000); start=end-int(years*365.25*24*60*60*1000)
     try:
@@ -83,39 +87,12 @@ if "df" in st.session_state:
                 if wf: st.dataframe(pd.DataFrame(wf),hide_index=True,use_container_width=True)
         st.subheader("Diagnose")
         st.dataframe(pd.DataFrame(diagnostics),hide_index=True,use_container_width=True)
-        if all_trades and len(all_trades[0]):
+        if any(len(t) for t in all_trades):
             trades=pd.concat(all_trades,ignore_index=True)
             st.subheader("Holdout-Trades")
             st.dataframe(trades,hide_index=True,use_container_width=True)
             st.download_button("Trades als CSV herunterladen",trades.to_csv(index=False),file_name="atlas_holdout_trades.csv",mime="text/csv")
         st.line_chart(df.set_index(pd.to_datetime(df.timestamp,unit="ms",utc=True)).close.rename("Schlusskurs"))
-        st.caption("Noch offene Forschungsgrenzen: Parameteroptimierung, Walk-forward-Validierung, ausführliche Marktregimeanalyse und permanentes Paper-Trading kommen in Folgemeilensteinen. Keine Strategieauswahl wird als Gewinnversprechen dargestellt.")
+        st.caption("Forschungsergebnisse sind keine Paper-Ergebnisse. Holdout-Vergleiche dürfen nicht zur nachträglichen Auswahl einer Strategie genutzt werden.")
     else:
         st.warning("Wähle mindestens eine Strategie aus und starte die Tests erneut.")
-
-# Atlas: automatisches Paper-Trading-Konto
-import json
-from urllib.request import urlopen
-
-st.divider()
-st.subheader("🤖 Automatischer Paper-Bot")
-
-try:
-    state_url = (
-        "https://raw.githubusercontent.com/"
-        "janneswiele/atlas-trading-ai/main/paper_state.json"
-    )
-    with urlopen(state_url, timeout=10) as response:
-        paper = json.load(response)
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Kontowert", f"{paper['equity_eur']:.2f} €")
-    col2.metric("Guthaben", f"{paper['cash_eur']:.2f} €")
-    col3.metric("BTC-Bestand", f"{paper['btc']:.8f}")
-
-    st.info(f"Letzte Entscheidung: {paper['last_result']}")
-    st.caption(
-        f"Letzte Prüfung (UTC): {paper['last_checked_utc']}"
-    )
-except Exception as exc:
-    st.warning(f"Paper-Konto derzeit nicht abrufbar: {exc}")

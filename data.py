@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
+import numpy as np
 import time
 from pathlib import Path
 from typing import Callable
@@ -55,7 +56,7 @@ def normalize(raw):
     for c in COLUMNS[1:]:
         df[c] = pd.to_numeric(df[c], errors="coerce")
     df = df.dropna().drop_duplicates("timestamp", keep="last").sort_values("timestamp")
-    valid = (df.low > 0) & (df.high >= df[["open", "close", "low"]].max(axis=1)) & (df.low <= df[["open", "close"]].min(axis=1)) & (df.volume >= 0)
+    valid = np.isfinite(df[COLUMNS].astype(float)).all(axis=1) & (df.low > 0) & (df.high >= df[["open", "close", "low"]].max(axis=1)) & (df.low <= df[["open", "close"]].min(axis=1)) & (df.volume >= 0)
     return df.loc[valid].astype({"timestamp": "int64"}).reset_index(drop=True)
 
 
@@ -83,6 +84,7 @@ def fetch_history(exchange_id: str, symbol: str, timeframe: str, start_ms: int, 
             available = [s for s in markets if s.endswith("/USDT") and s.split("/")[0] in {"BTC", "ETH", "SOL"}]
             raise RuntimeError(f"{symbol} ist bei {exchange_id} nicht verfügbar. Verfügbare Startmärkte: {', '.join(available) or 'keine der ausgewählten USDT-Paare'}")
     step = TIMEFRAME_MS[timeframe]
+    cached = cached.loc[cached.timestamp + step <= ex.milliseconds()].reset_index(drop=True)
     cursor = start_ms
     if not cached.empty:
         ts = cached.timestamp.to_numpy(dtype="int64")
@@ -125,12 +127,13 @@ def fetch_history(exchange_id: str, symbol: str, timeframe: str, start_ms: int, 
             break
         cursor = next_cursor
     fresh = normalize(raw_pages)
+    fresh = fresh.loc[fresh.timestamp + step <= ex.milliseconds()].reset_index(drop=True)
     if not fresh.empty:
         cache_write(cache_path, exchange_id, symbol, timeframe, fresh)
     parts = [part for part in (cached, fresh) if not part.empty]
     merged = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=COLUMNS)
     merged = normalize(merged[COLUMNS].values.tolist()) if not merged.empty else merged
-    # Closed candles only. The current candle can be incomplete.
+    # Never cache a still-forming candle: it would otherwise remain stale forever.
     now_ms = ex.milliseconds()
     merged = merged.loc[merged.timestamp + TIMEFRAME_MS[timeframe] <= now_ms].reset_index(drop=True)
     gaps = int(max(0, (merged.timestamp.diff().dropna() // step - 1).clip(lower=0).sum())) if len(merged) > 1 else 0

@@ -8,8 +8,10 @@ from strategies import generate_signals
 def backtest(df, strategy, initial_cash=1000.0, fee_rate=0.001, slippage=0.0005,
              risk_fraction=0.005, max_allocation=0.20, stop_atr=2.0, take_atr=4.0,
              start_index=0, end_index=None, timeframe="15m", strategy_params=None):
-    if initial_cash <= 0 or not 0 <= fee_rate < .1 or not 0 <= slippage < .1:
+    if not all(math.isfinite(v) for v in (initial_cash, fee_rate, slippage, risk_fraction, max_allocation, stop_atr, take_atr)) or initial_cash <= 0 or not 0 <= fee_rate < .1 or not 0 <= slippage < .1:
         raise ValueError("Ungültige Kapital-, Gebühren- oder Slippage-Einstellung")
+    if not 0 < risk_fraction <= .20 or not 0 < max_allocation <= .20 or min(stop_atr, take_atr) <= 0:
+        raise ValueError("Ungültige Risikoparameter")
     end_index = len(df) if end_index is None else int(end_index)
     if not 0 <= int(start_index) < end_index <= len(df):
         raise ValueError("Ungültige Testgrenzen")
@@ -20,7 +22,8 @@ def backtest(df, strategy, initial_cash=1000.0, fee_rate=0.001, slippage=0.0005,
     for i in range(int(start_index), end_index):
         bar = df.iloc[i]; diagnostics["candles_evaluated"] += 1
         o,h,l,c = map(float, (bar.open,bar.high,bar.low,bar.close))
-        if min(o,h,l,c) <= 0:
+        exited_this_bar = False
+        if not all(math.isfinite(v) for v in (o,h,l,c)) or min(o,h,l,c) <= 0 or h < max(o,l,c) or l > min(o,c):
             raise ValueError(f"Ungültiger OHLC-Wert in Zeile {i}")
         # Position exits at the next bar open when a close-based exit was known.
         if qty > 0 and i > 0 and bool(exits.iloc[i-1]):
@@ -28,6 +31,19 @@ def backtest(df, strategy, initial_cash=1000.0, fee_rate=0.001, slippage=0.0005,
             cash += gross-fee
             trades.append(_trade(strategy, df, entry_signal_time, entry_time, i, entry_fill, fill, qty, entry_value, entry_fee, fee, pnl, "Strategie-Ausgang", entry_reason))
             qty=entry_fee=entry_value=0.0
+            exited_this_bar = True
+        # Signal at prior close, fill no earlier than this bar's open.
+        if qty == 0 and not exited_this_bar and i > int(start_index) and bool(entries.iloc[i-1]):
+            atr=float(x.atr.iloc[i-1]) if pd.notna(x.atr.iloc[i-1]) else 0
+            fill=o*(1+slippage); stop_distance=max(atr*stop_atr, fill*.01)
+            planned_risk=cash*risk_fraction; risk_qty=planned_risk/stop_distance
+            cap_qty=cash*max_allocation/(fill*(1+fee_rate)); qty=min(risk_qty,cap_qty)
+            cost=qty*fill; fee=cost*fee_rate; total=cost+fee
+            if not math.isfinite(qty) or qty <= 0 or total > cash:
+                diagnostics["risk_rejections"]+=1; qty=0
+            else:
+                cash-=total; entry_fill=fill; entry_value=cost; entry_fee=fee; stop=fill-stop_distance; take=fill+atr*take_atr if atr>0 else fill+2*stop_distance
+                entry_time=bar.timestamp; entry_signal_time=df.iloc[i-1].timestamp
         # Stop/take are active on every bar after entry. If both hit, stop wins.
         if qty > 0:
             exit_price = reason = None
@@ -42,18 +58,6 @@ def backtest(df, strategy, initial_cash=1000.0, fee_rate=0.001, slippage=0.0005,
                 diagnostics["stop_hits" if "Stop" in reason else "take_hits"] += 1
                 trades.append(_trade(strategy,df,entry_signal_time,entry_time,i,entry_fill,fill,qty,entry_value,entry_fee,fee,pnl,reason,entry_reason))
                 qty=entry_fee=entry_value=0.0
-        # Signal at prior close, fill no earlier than this bar's open.
-        if qty == 0 and i > 0 and bool(entries.iloc[i-1]):
-            atr=float(x.atr.iloc[i-1]) if pd.notna(x.atr.iloc[i-1]) else 0
-            fill=o*(1+slippage); stop_distance=max(atr*stop_atr, fill*.01)
-            planned_risk=cash*risk_fraction; risk_qty=planned_risk/stop_distance
-            cap_qty=cash*max_allocation/(fill*(1+fee_rate)); qty=min(risk_qty,cap_qty)
-            cost=qty*fill; fee=cost*fee_rate; total=cost+fee
-            if not math.isfinite(qty) or qty <= 0 or total > cash:
-                diagnostics["risk_rejections"]+=1; qty=0
-            else:
-                cash-=total; entry_fill=fill; entry_value=cost; entry_fee=fee; stop=fill-stop_distance; take=fill+atr*take_atr if atr>0 else fill+2*stop_distance
-                entry_time=bar.timestamp; entry_signal_time=df.iloc[i-1].timestamp
         marked=cash+(qty*c*(1-fee_rate-slippage) if qty else 0)
         equity.append({"timestamp":bar.timestamp,"equity":marked})
     if qty>0:
