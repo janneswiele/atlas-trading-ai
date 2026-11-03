@@ -2,10 +2,52 @@
   "cash_eur": 100.0,
   "btc": 0.0,
   "entry_eur": null,
-  "last_ts": 1793692800,
-  "last_price_eur": 69088.2,
+  "last_ts": 1793707200,
+  "last_price_eur": 69387.6,
   "equity_eur": 100.0,
-  "last_checked_utc": "2026-11-03T13:06:40+00:00",
-  "last_result": "Halten: kein Signal",
-  "strategy": "SMA20/50 Demo (nicht validiert)"
+  "last_checked_utc": "2026-11-03T17:01:44+00:00",
+  "last_result": "Halten: keine zugelassene Strategie",
+  "strategy": "Keine zugelassen",
+  "legacy_snapshot": {
+    "cash_eur": 100.0,
+    "btc": 0.0,
+    "entry_eur": null,
+    "last_ts": 1793692800,
+    "last_price_eur": 69088.2,
+    "equity_eur": 100.0,
+    "last_checked_utc": "2026-11-03T13:06:40+00:00",
+    "last_result": "Halten: kein Signal",
+    "strategy": "SMA20/50 Demo (nicht validiert)"
+  },
+  "schema_version": 4,
+  "trades": [],
+  "equity_history": [
+    {
+      "time": "2026-11-03T17:01:44+00:00",
+      "equity_eur": 100.0,
+      "buy_hold_eur": 99.70030578950596
+    }
+  ],
+  "decisions": [
+    {
+      "time": "2026-11-03T17:01:44+00:00",
+      "candle": 1793707200,
+      "reason": "Halten: keine zugelassene Strategie"
+    }
+  ],
+  "realized_pnl_eur": 0.0,
+  "fees_eur": 0.0,
+  "cost_basis_eur": 0.0,
+  "position_strategy": null,
+  "peak_equity_eur": 100.0,
+  "halted": false,
+  "accounting_note": "v0.4 metrics start at migration; legacy cost basis unknown for existing position. Original CSV retained.",
+  "risk_day": "2026-11-03",
+  "day_start_equity": 100.0,
+  "benchmark": {
+    "time": "2026-11-03T17:01:44+00:00",
+    "initial_equity": 100.0,
+    "qty": 0.0014390183679916409
+  },
+  "last_success_utc": "2026-11-03T17:01:44+00:00"
 }
