@@ -27,7 +27,7 @@ jobs:
         run: python -m pytest -q
 
       - name: Research BTC/EUR history
-        run: python atlas_v06.py --days 730 --output atlas-research-output
+        run: python atlas_v07.py --days 730 --output atlas-research-output
 
       - name: Save research results
         if: success()
