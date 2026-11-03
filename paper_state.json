@@ -5,8 +5,8 @@
   "last_ts": 1793707200,
   "last_price_eur": 69387.6,
   "equity_eur": 100.0,
-  "last_checked_utc": "2026-11-03T17:01:44+00:00",
-  "last_result": "Halten: keine zugelassene Strategie",
+  "last_checked_utc": "2026-11-03T17:12:23+00:00",
+  "last_result": "Halten: Kerze bereits verarbeitet",
   "strategy": "Keine zugelassen",
   "legacy_snapshot": {
     "cash_eur": 100.0,
@@ -33,6 +33,11 @@
       "time": "2026-11-03T17:01:44+00:00",
       "candle": 1793707200,
       "reason": "Halten: keine zugelassene Strategie"
+    },
+    {
+      "time": "2026-11-03T17:12:23+00:00",
+      "candle": 1793707200,
+      "reason": "Halten: Kerze bereits verarbeitet"
     }
   ],
   "realized_pnl_eur": 0.0,
