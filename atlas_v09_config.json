@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "mode": "SHADOW_RESEARCH_ONLY",
+  "capital": 100,
+  "fee": 0.006,
+  "slippage": 0.0005,
+  "cost_label": "Frozen research assumption, not a verified personal exchange tariff",
+  "warmup_start": 1790812800,
+  "risk": {
+    "max_allocation": 0.2,
+    "max_positions": 1,
+    "stop_loss": 0.02,
+    "take_profit": 0.04,
+    "daily_loss_limit": 0.03,
+    "max_drawdown": 0.1
+  }
+}
