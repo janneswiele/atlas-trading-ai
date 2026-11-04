@@ -1,1 +1,4 @@
-{"action": "disabled", "request_id": "change-this-for-a-manual-cycle"}
+{
+  "action": "activate",
+  "request_id": "atlas-v09-first-activation-2026-11-04"
+}

@@ -1,0 +1,265 @@
+{
+  "version": "0.8.5-FEE-AUDIT-RESEARCH-ONLY",
+  "purpose": "Diagnose if existing fixed strategies lack gross signal edge or costs erase it; not a strategy search",
+  "sample_status": "REUSED_PREVIOUSLY_EXAMINED_HISTORICAL_PRE_HOLDOUT_WINDOWS_NOT_NEW_OOS",
+  "fee_scenarios": [
+    {
+      "label": "fee_free_idealization",
+      "fee_per_fill": 0.0
+    },
+    {
+      "label": "illustrative_0p5pct",
+      "fee_per_fill": 0.005
+    },
+    {
+      "label": "original_0p6pct",
+      "fee_per_fill": 0.006
+    },
+    {
+      "label": "kraken_pro_tier1_taker_0p8pct",
+      "fee_per_fill": 0.008
+    },
+    {
+      "label": "cost_stress_1p2pct",
+      "fee_per_fill": 0.012
+    }
+  ],
+  "slippage_per_fill": 0.0005,
+  "exchange_price_warning": "0.8% Kraken Pro tier-1 taker fee from public Nov 2026 schedule; user account/venue may differ. All figures are assumptions, not executed trades.",
+  "code_fingerprints": {
+    "atlas_v08.py": "abf22752bca3c80f16ffe0cf2f366822d324d7c9b56798b38fa8e37258162255",
+    "atlas_v084.py": "939f48ab55818164c68c00d0d2a0ee40a1efcc9804475e5ecb374d4545d32151",
+    "atlas_v085.py": "6f99572a87a40a3375f3843157eaa52b91a668781b273c156cd022208c308e95",
+    "paper_config.json": "e668f29cf7cf8d7928551c8ec0ab43d1ea8b6e325dd8033429340642379cce43"
+  },
+  "model_summaries": {
+    "SMA 20/50": {
+      "fee_free_idealization": {
+        "window_count": 7,
+        "average_return_pct": 1.6509,
+        "average_alpha_vs_same_cost_passive20_pp": -2.0119,
+        "alpha_positive_windows": 3,
+        "trades_total": 41,
+        "average_fees_EUR_per_window_on_100EUR": 0.0
+      },
+      "illustrative_0p5pct": {
+        "window_count": 7,
+        "average_return_pct": 0.4591,
+        "average_alpha_vs_same_cost_passive20_pp": -2.9683,
+        "alpha_positive_windows": 3,
+        "trades_total": 41,
+        "average_fees_EUR_per_window_on_100EUR": 1.1718
+      },
+      "original_0p6pct": {
+        "window_count": 7,
+        "average_return_pct": 0.2237,
+        "average_alpha_vs_same_cost_passive20_pp": -3.1568,
+        "alpha_positive_windows": 3,
+        "trades_total": 41,
+        "average_fees_EUR_per_window_on_100EUR": 1.4033
+      },
+      "kraken_pro_tier1_taker_0p8pct": {
+        "window_count": 7,
+        "average_return_pct": -0.2442,
+        "average_alpha_vs_same_cost_passive20_pp": -3.5314,
+        "alpha_positive_windows": 2,
+        "trades_total": 41,
+        "average_fees_EUR_per_window_on_100EUR": 1.8633
+      },
+      "cost_stress_1p2pct": {
+        "window_count": 7,
+        "average_return_pct": -1.1685,
+        "average_alpha_vs_same_cost_passive20_pp": -4.2701,
+        "alpha_positive_windows": 1,
+        "trades_total": 41,
+        "average_fees_EUR_per_window_on_100EUR": 2.772
+      }
+    },
+    "EMA Trend": {
+      "fee_free_idealization": {
+        "window_count": 7,
+        "average_return_pct": 0.4234,
+        "average_alpha_vs_same_cost_passive20_pp": -3.2394,
+        "alpha_positive_windows": 3,
+        "trades_total": 19,
+        "average_fees_EUR_per_window_on_100EUR": 0.0
+      },
+      "illustrative_0p5pct": {
+        "window_count": 7,
+        "average_return_pct": -0.1509,
+        "average_alpha_vs_same_cost_passive20_pp": -3.5782,
+        "alpha_positive_windows": 3,
+        "trades_total": 19,
+        "average_fees_EUR_per_window_on_100EUR": 0.556
+      },
+      "original_0p6pct": {
+        "window_count": 7,
+        "average_return_pct": -0.2647,
+        "average_alpha_vs_same_cost_passive20_pp": -3.6452,
+        "alpha_positive_windows": 3,
+        "trades_total": 19,
+        "average_fees_EUR_per_window_on_100EUR": 0.6662
+      },
+      "kraken_pro_tier1_taker_0p8pct": {
+        "window_count": 7,
+        "average_return_pct": -0.4911,
+        "average_alpha_vs_same_cost_passive20_pp": -3.7783,
+        "alpha_positive_windows": 3,
+        "trades_total": 19,
+        "average_fees_EUR_per_window_on_100EUR": 0.8856
+      },
+      "cost_stress_1p2pct": {
+        "window_count": 7,
+        "average_return_pct": -0.9399,
+        "average_alpha_vs_same_cost_passive20_pp": -4.0416,
+        "alpha_positive_windows": 3,
+        "trades_total": 19,
+        "average_fees_EUR_per_window_on_100EUR": 1.3202
+      }
+    },
+    "Donchian30_Chandelier22_ATR14x2p5": {
+      "fee_free_idealization": {
+        "window_count": 7,
+        "average_return_pct": 0.036,
+        "average_alpha_vs_same_cost_passive20_pp": -3.6268,
+        "alpha_positive_windows": 2,
+        "trades_total": 70,
+        "average_fees_EUR_per_window_on_100EUR": 0.0
+      },
+      "illustrative_0p5pct": {
+        "window_count": 7,
+        "average_return_pct": -2.0249,
+        "average_alpha_vs_same_cost_passive20_pp": -5.4522,
+        "alpha_positive_windows": 2,
+        "trades_total": 70,
+        "average_fees_EUR_per_window_on_100EUR": 2.0209
+      },
+      "original_0p6pct": {
+        "window_count": 7,
+        "average_return_pct": -2.4295,
+        "average_alpha_vs_same_cost_passive20_pp": -5.8101,
+        "alpha_positive_windows": 2,
+        "trades_total": 70,
+        "average_fees_EUR_per_window_on_100EUR": 2.4178
+      },
+      "kraken_pro_tier1_taker_0p8pct": {
+        "window_count": 7,
+        "average_return_pct": -3.2315,
+        "average_alpha_vs_same_cost_passive20_pp": -6.5186,
+        "alpha_positive_windows": 1,
+        "trades_total": 70,
+        "average_fees_EUR_per_window_on_100EUR": 3.2045
+      },
+      "cost_stress_1p2pct": {
+        "window_count": 7,
+        "average_return_pct": -4.8063,
+        "average_alpha_vs_same_cost_passive20_pp": -7.9079,
+        "alpha_positive_windows": 0,
+        "trades_total": 70,
+        "average_fees_EUR_per_window_on_100EUR": 4.7498
+      }
+    },
+    "TSMOM60_Vol30_180x1p5": {
+      "fee_free_idealization": {
+        "window_count": 7,
+        "average_return_pct": 1.4592,
+        "average_alpha_vs_same_cost_passive20_pp": -2.2036,
+        "alpha_positive_windows": 2,
+        "trades_total": 100,
+        "average_fees_EUR_per_window_on_100EUR": 0.0
+      },
+      "illustrative_0p5pct": {
+        "window_count": 7,
+        "average_return_pct": -1.4046,
+        "average_alpha_vs_same_cost_passive20_pp": -4.832,
+        "alpha_positive_windows": 0,
+        "trades_total": 100,
+        "average_fees_EUR_per_window_on_100EUR": 2.8251
+      },
+      "original_0p6pct": {
+        "window_count": 7,
+        "average_return_pct": -1.9642,
+        "average_alpha_vs_same_cost_passive20_pp": -5.3447,
+        "alpha_positive_windows": 0,
+        "trades_total": 100,
+        "average_fees_EUR_per_window_on_100EUR": 3.3771
+      },
+      "kraken_pro_tier1_taker_0p8pct": {
+        "window_count": 7,
+        "average_return_pct": -3.0705,
+        "average_alpha_vs_same_cost_passive20_pp": -6.3577,
+        "alpha_positive_windows": 0,
+        "trades_total": 100,
+        "average_fees_EUR_per_window_on_100EUR": 4.4685
+      },
+      "cost_stress_1p2pct": {
+        "window_count": 7,
+        "average_return_pct": -5.0909,
+        "average_alpha_vs_same_cost_passive20_pp": -8.1925,
+        "alpha_positive_windows": 0,
+        "trades_total": 93,
+        "average_fees_EUR_per_window_on_100EUR": 6.1733
+      }
+    }
+  },
+  "hypothetical_stop_take_economics": [
+    {
+      "fee_per_fill": 0.0,
+      "slippage_per_fill": 0.0005,
+      "take_profit_net_pct_at_exact_threshold": 3.948000000000018,
+      "stop_loss_net_pct_at_exact_threshold": -2.049000000000001,
+      "break_even_win_rate_pct_at_exact_threshold": 34.16708354177079,
+      "note": "Simplified fixed threshold fills. Next-open price gaps and non-stop exits change realized results."
+    },
+    {
+      "fee_per_fill": 0.005,
+      "slippage_per_fill": 0.0005,
+      "take_profit_net_pct_at_exact_threshold": 2.9136915422885767,
+      "stop_loss_net_pct_at_exact_threshold": -3.023636815920383,
+      "break_even_win_rate_pct_at_exact_threshold": 50.925881701319376,
+      "note": "Simplified fixed threshold fills. Next-open price gaps and non-stop exits change realized results."
+    },
+    {
+      "fee_per_fill": 0.006,
+      "slippage_per_fill": 0.0005,
+      "take_profit_net_pct_at_exact_threshold": 2.7080636182902573,
+      "stop_loss_net_pct_at_exact_threshold": -3.2174015904572473,
+      "break_even_win_rate_pct_at_exact_threshold": 54.29787328271776,
+      "note": "Simplified fixed threshold fills. Next-open price gaps and non-stop exits change realized results."
+    },
+    {
+      "fee_per_fill": 0.008,
+      "slippage_per_fill": 0.0005,
+      "take_profit_net_pct_at_exact_threshold": 2.298031746031759,
+      "stop_loss_net_pct_at_exact_threshold": -3.6037777777777835,
+      "break_even_win_rate_pct_at_exact_threshold": 61.062251555885375,
+      "note": "Simplified fixed threshold fills. Next-open price gaps and non-stop exits change realized results."
+    },
+    {
+      "fee_per_fill": 0.012,
+      "slippage_per_fill": 0.0005,
+      "take_profit_net_pct_at_exact_threshold": 1.4828300395256955,
+      "stop_loss_net_pct_at_exact_threshold": -4.371948616600796,
+      "break_even_win_rate_pct_at_exact_threshold": 74.67316654278554,
+      "note": "Simplified fixed threshold fills. Next-open price gaps and non-stop exits change realized results."
+    }
+  ],
+  "global_holdout_start": "2026-02-24T00:00:00Z",
+  "holdout_evaluated": false,
+  "paper_trading_authorized": false,
+  "release_gate": {
+    "passed": false,
+    "paper_trading_authorized": false,
+    "reason": "Fee diagnostics never authorize trading"
+  },
+  "limitations": [
+    "Retrospective diagnostics on pre-examined windows; selecting a winner would be data snooping",
+    "Assumed exact next-4h-open fills ignore orderbook depth and limit-order nonfills",
+    "Fixed stops/take-profits are evaluated at NEXT 4h open and may have price gaps",
+    "No guarantee that the 0.5% scenario applies to any specific broker/account",
+    "Zero-fee scenario is impossible as a practical baseline for many users and is not an approval",
+    "Original 100-EUR starting value resets for each 90-day window",
+    "Final global holdout excluded by verified_input before any simulation",
+    "No changes to production paper trading or real orders"
+  ]
+}
