@@ -1,0 +1,5 @@
+{
+  "passed": false,
+  "paper_trading_authorized": false,
+  "reason": "Fee diagnostics never authorize trading"
+}
