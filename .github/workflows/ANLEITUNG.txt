@@ -1,0 +1,24 @@
+ATLAS v0.9 - WORKFLOW-FIX (NUR BRANCH atlas-v0.9)
+
+1. Die Datei atlas-v09.yml ersetzt die bisherige Datei im GitHub-Ordner
+   .github/workflows auf dem Branch atlas-v0.9. NICHT auf main!
+2. GitHub-Link: https://github.com/janneswiele/atlas-trading-ai/upload/atlas-v0.9/.github/workflows
+3. Dies ist nur eine Workflow-Reparatur; Python-Quellcode, Studienhash und
+   existierender Datenbranch atlas-v0.9-data bleiben unangetastet.
+4. Nach dem Commit sollte ein reiner Testlauf erscheinen. Shadow wird bei
+   Workflow- und Dokumentationscommits absichtlich NICHT gestartet.
+5. Für einen weiteren virtuellen Forward-Zyklus: vorab die Datei
+   atlas_v09_command.json von "activate" auf "cycle" ändern und request_id
+   neu setzen. Danach für jeden weiteren Zyklus NUR request_id anpassen.
+   GitHub: https://github.com/janneswiele/atlas-trading-ai/blob/atlas-v0.9/atlas_v09_command.json
+6. Diese Änderung erst 5 bis 35 Minuten nach einem neuen 4h-UTC-Kerzenschluss
+   committen (am 4.11.2026 z.B. 17:05-17:35 Uhr MEZ).
+7. Änderungen außerhalb des Zeitfensters werden sicher übersprungen,
+   ohne den Datenbranch zu resetten oder einen alten Kurs zu handeln.
+
+Hinweis: GitHub bietet auf einem reinen Entwicklungsbranch ohne Workflow
+auf main keinen zuverlässigen Zeitplan bzw. manuellen Run-workflow-Button.
+Dafür wäre später eine gesonderte, geprüfte Integration auf main nötig.
+
+Geändert wurden NUR GitHub-Workflow-Orchestrierung, sichere Zeitfenster-
+Prüfung und Artefaktpfade. Keine Änderung an Handelsstrategie oder Risiko.

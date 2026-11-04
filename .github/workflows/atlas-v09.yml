@@ -5,11 +5,8 @@ on:
     branches: [atlas-v0.9]
   pull_request:
     branches: [atlas-v0.9, main]
-  workflow_dispatch:
-  # GitHub only schedules workflows installed on the DEFAULT branch.
-  # This update deliberately does not install/merge anything into main.
-  schedule:
-    - cron: '17 */4 * * *'
+  # No schedule or Run workflow on this research branch: GitHub requires
+  # default-branch registration. Only an explicit command-file push can cycle.
 
 permissions:
   contents: read
@@ -28,7 +25,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-          ref: ${{ github.event_name == 'schedule' && 'atlas-v0.9' || github.sha }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
@@ -38,15 +35,34 @@ jobs:
       - run: python -m compileall -q atlas09 atlas_v09.py atlas_v085.py
       - run: python -m pytest -q --junitxml=test-results.xml
       - id: command
-        name: Read explicit research command
+        name: Enable shadow ONLY on an explicit command-file commit
         run: |
           python - <<'PY'
           import json, os
           cfg=json.load(open('atlas_v09_config.json'))
-          action=json.load(open('atlas_v09_command.json'))['action']
-          if action not in ('disabled','activate','cycle'): raise ValueError('Invalid command')
-          if not cfg['enabled']: action='disabled'
-          with open(os.environ['GITHUB_OUTPUT'],'a') as f: f.write('action='+action+'\n')
+          command=json.load(open('atlas_v09_command.json'))
+          action=command['action']
+          if action not in ('disabled','activate','cycle'):
+              raise ValueError('Unrecognised shadow command')
+          if os.environ.get('GITHUB_EVENT_NAME') != 'push' or os.environ.get('GITHUB_REF') != 'refs/heads/atlas-v0.9':
+              action='disabled'
+          else:
+              event=json.load(open(os.environ['GITHUB_EVENT_PATH']))
+              changed=set()
+              for commit in event.get('commits',[]):
+                  for key in ('added','modified','removed'):
+                      changed.update(commit.get(key, []))
+              head=event.get('head_commit') or {}
+              for key in ('added','modified','removed'):
+                  changed.update(head.get(key, []))
+              # Commits of code/docs/workflows never trigger a shadow run.
+              if 'atlas_v09_command.json' not in changed:
+                  action='disabled'
+          if not cfg['enabled']:
+              action='disabled'
+          print('Atlas requested action:', action)
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('action='+action+'\n')
           PY
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -59,8 +75,8 @@ jobs:
     # No writes for pull requests, forks, other branches, or disabled installations.
     if: >-
       github.repository == 'janneswiele/atlas-trading-ai' &&
-      (github.ref == 'refs/heads/atlas-v0.9' || github.event_name == 'schedule') &&
-      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/atlas-v0.9' &&
+      github.event_name == 'push' &&
       needs.tests.outputs.action != 'disabled'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -70,14 +86,30 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 1
-          ref: ${{ github.event_name == 'schedule' && 'atlas-v0.9' || github.sha }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements-v09.txt
       - run: python -m pip install -r requirements-v09.txt
+      - id: window
+        name: Check UTC 4h close window; safely skip late or early runs
+        run: |
+          python - <<'PY'
+          import os, time
+          seconds_since_utc_4h_close = int(time.time()) % 14400
+          # Existing core requires age <= 3600 s; reserve time for API reads.
+          eligible = 300 <= seconds_since_utc_4h_close <= 2400
+          print('Seconds after latest 4h UTC close:', seconds_since_utc_4h_close)
+          if not eligible:
+              print('SAFE_SKIP: outside the 5–40 min post-close window; NO trade, NO reset.')
+              print('Try another explicit command-file commit during the next window.')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('eligible=' + str(eligible).lower() + '\n')
+          PY
       - name: Restore durable isolated data branch; never reset missing state
+        if: steps.window.outputs.eligible == 'true'
         env:
           REQUEST: ${{ needs.tests.outputs.action }}
         run: |
@@ -98,6 +130,7 @@ jobs:
           fi
       - id: run
         name: Observe closed candles and later public quote
+        if: steps.window.outputs.eligible == 'true'
         continue-on-error: true
         env:
           REQUEST: ${{ needs.tests.outputs.action }}
@@ -108,7 +141,7 @@ jobs:
             python atlas_v09.py --directory ../atlas-state --git-ledger
           fi
       - name: Persist decisions and errors using a normal fast-forward push
-        if: always() && steps.run.outcome != 'skipped'
+        if: always() && steps.window.outputs.eligible == 'true' && steps.run.outcome != 'skipped'
         run: |
           test -f ../atlas-state/ledger.json
           python - <<'PY'
@@ -126,15 +159,24 @@ jobs:
             git -C ../atlas-state commit -m 'Append Atlas shadow research observations'
             git -C ../atlas-state push origin HEAD:refs/heads/atlas-v0.9-data
           fi
-      - if: always()
+      - name: Copy audit files into workspace (GitHub artifact path safety)
+        if: always() && steps.window.outputs.eligible == 'true'
+        run: |
+          mkdir -p atlas-v09-shadow-audit
+          for file in ledger.json dashboard.html quality.json; do
+            if [ -f "../atlas-state/$file" ]; then
+              cp -- "../atlas-state/$file" "atlas-v09-shadow-audit/$file"
+            fi
+          done
+          if [ -d ../atlas-state/raw ]; then
+            mkdir -p atlas-v09-shadow-audit/raw
+            cp -a ../atlas-state/raw/. atlas-v09-shadow-audit/raw/
+          fi
+      - if: always() && steps.window.outputs.eligible == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: atlas-v09-shadow-audit
-          path: |
-            ../atlas-state/ledger.json
-            ../atlas-state/dashboard.html
-            ../atlas-state/quality.json
-            ../atlas-state/raw/
+          path: atlas-v09-shadow-audit/
           if-no-files-found: warn
           retention-days: 30
       - name: Expose failed cycle
