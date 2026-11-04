@@ -1,0 +1,5 @@
+1. ZIP in der iPad Dateien-App öffnen und entpacken.
+2. GitHub-Zweig atlas-v0.9 auswählen.
+3. ATLAS_V09.md und ATLAS_V085.md direkt in den Hauptordner des GitHub-Repositories hochladen.
+4. Nicht die ZIP-Datei hochladen.
+5. Commit changes drücken.
