@@ -29,7 +29,7 @@
   "last_bar": null,
   "seen": {},
   "pending": null,
-  "failures": 0,
+  "failures": 1,
   "circuit": false,
   "benchmark": null,
   "accounts": {
@@ -121,7 +121,18 @@
         "holdout_evaluated": false
       },
       "hash": "cfe2eec49a1cd2ef800b5ecb39a54e2a1a87d14cb80222ffd02153f69c203023"
+    },
+    {
+      "id": 1,
+      "previous": "cfe2eec49a1cd2ef800b5ecb39a54e2a1a87d14cb80222ffd02153f69c203023",
+      "kind": "ERROR",
+      "time": 1793798171.0506344,
+      "payload": {
+        "error": "Stale or open candle / delayed execution",
+        "circuit": false
+      },
+      "hash": "1bec8bd8f80b7ae0dd732f01bb776d2c0c1288598765779585ba9e489a7df91a"
     }
   ],
-  "seal": "882f32434f0b582de92485673c6a669c1432dfdf1c9ede9f4f05b0a7aa2c9ddf"
+  "seal": "f993c35982b373bcd41691e959957dc67690ace24ab9b605117867cc3fc7ac2f"
 }
