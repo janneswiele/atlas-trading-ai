@@ -1,0 +1,127 @@
+{
+  "version": "0.9",
+  "activation": 1793798169.3435419,
+  "config": "893837aa03c6d5e8f46680d15baa991960c7ddf954606bb2878871e4ea50319d",
+  "code": "44f343f32cc5fafaf113f396fefb597c9583565e684c1a8f6362c26ef0ae1fe3",
+  "protocol": {
+    "enabled": true,
+    "mode": "SHADOW_RESEARCH_ONLY",
+    "capital": 100,
+    "fee": 0.006,
+    "slippage": 0.0005,
+    "cost_label": "Frozen research assumption, not a verified personal exchange tariff",
+    "warmup_start": 1790812800,
+    "risk": {
+      "max_allocation": 0.2,
+      "max_positions": 1,
+      "stop_loss": 0.02,
+      "take_profit": 0.04,
+      "daily_loss_limit": 0.03,
+      "max_drawdown": 0.1
+    }
+  },
+  "market": {
+    "pair": "BTC/EUR",
+    "primary": "Coinbase",
+    "control": "Kraken",
+    "timeframe": "4h UTC"
+  },
+  "last_bar": null,
+  "seen": {},
+  "pending": null,
+  "failures": 0,
+  "circuit": false,
+  "benchmark": null,
+  "accounts": {
+    "SMA 20/50": {
+      "cash": 100,
+      "quantity": 0.0,
+      "entry": 0.0,
+      "basis": 0.0,
+      "fees": 0.0,
+      "slippage_cost": 0.0,
+      "realized": 0.0,
+      "closed": 0,
+      "wins": 0,
+      "gross_profit": 0.0,
+      "gross_loss": 0.0,
+      "peak": 100,
+      "equity": 100,
+      "drawdown": 0.0,
+      "day": null,
+      "day_equity": 100,
+      "halted": false
+    },
+    "EMA Trend": {
+      "cash": 100,
+      "quantity": 0.0,
+      "entry": 0.0,
+      "basis": 0.0,
+      "fees": 0.0,
+      "slippage_cost": 0.0,
+      "realized": 0.0,
+      "closed": 0,
+      "wins": 0,
+      "gross_profit": 0.0,
+      "gross_loss": 0.0,
+      "peak": 100,
+      "equity": 100,
+      "drawdown": 0.0,
+      "day": null,
+      "day_equity": 100,
+      "halted": false
+    },
+    "Donchian30_Chandelier22_ATR14x2p5": {
+      "cash": 100,
+      "quantity": 0.0,
+      "entry": 0.0,
+      "basis": 0.0,
+      "fees": 0.0,
+      "slippage_cost": 0.0,
+      "realized": 0.0,
+      "closed": 0,
+      "wins": 0,
+      "gross_profit": 0.0,
+      "gross_loss": 0.0,
+      "peak": 100,
+      "equity": 100,
+      "drawdown": 0.0,
+      "day": null,
+      "day_equity": 100,
+      "halted": false
+    },
+    "TSMOM60_Vol30_180x1p5": {
+      "cash": 100,
+      "quantity": 0.0,
+      "entry": 0.0,
+      "basis": 0.0,
+      "fees": 0.0,
+      "slippage_cost": 0.0,
+      "realized": 0.0,
+      "closed": 0,
+      "wins": 0,
+      "gross_profit": 0.0,
+      "gross_loss": 0.0,
+      "peak": 100,
+      "equity": 100,
+      "drawdown": 0.0,
+      "day": null,
+      "day_equity": 100,
+      "halted": false
+    }
+  },
+  "events": [
+    {
+      "id": 0,
+      "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+      "kind": "ACTIVATED",
+      "time": 1793798169.3435419,
+      "payload": {
+        "mode": "SHADOW_RESEARCH_ONLY",
+        "holdout_evaluated": false
+      },
+      "hash": "cfe2eec49a1cd2ef800b5ecb39a54e2a1a87d14cb80222ffd02153f69c203023"
+    }
+  ],
+  "seal": "882f32434f0b582de92485673c6a669c1432dfdf1c9ede9f4f05b0a7aa2c9ddf"
+}
