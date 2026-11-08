@@ -1,7 +1,7 @@
 {
   "status": "success",
-  "last_attempt_utc": "2026-11-08T04:57:45+00:00",
+  "last_attempt_utc": "2026-11-08T08:57:24+00:00",
   "decision": "Halten: keine zugelassene Strategie",
   "equity_eur": 100.0,
-  "candle_ts": 1794096000
+  "candle_ts": 1794110400
 }
