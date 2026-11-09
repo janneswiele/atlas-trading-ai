@@ -1,7 +1,6 @@
 {
-  "status": "success",
-  "last_attempt_utc": "2026-11-09T17:15:41+00:00",
-  "decision": "Halten: keine zugelassene Strategie",
-  "equity_eur": 100.0,
-  "candle_ts": 1794225600
+  "status": "failed",
+  "last_attempt_utc": "2026-11-09T20:57:39+00:00",
+  "error_type": "TimeoutError",
+  "decision": "Sicher abgebrochen; Konto unverändert"
 }
