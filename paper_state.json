@@ -2,10 +2,10 @@
   "cash_eur": 100.0,
   "btc": 0.0,
   "entry_eur": null,
-  "last_ts": 1794369600,
-  "last_price_eur": 66031.7,
+  "last_ts": 1794384000,
+  "last_price_eur": 66407.1,
   "equity_eur": 100.0,
-  "last_checked_utc": "2026-11-11T09:01:11+00:00",
+  "last_checked_utc": "2026-11-11T13:15:05+00:00",
   "last_result": "Halten: keine zugelassene Strategie",
   "strategy": "Keine zugelassen",
   "legacy_snapshot": {
@@ -251,6 +251,11 @@
       "time": "2026-11-11T09:01:11+00:00",
       "equity_eur": 100.0,
       "buy_hold_eur": 94.87834543637365
+    },
+    {
+      "time": "2026-11-11T13:15:05+00:00",
+      "equity_eur": 100.0,
+      "buy_hold_eur": 95.41774289057844
     }
   ],
   "decisions": [
@@ -488,6 +493,11 @@
       "time": "2026-11-11T09:01:11+00:00",
       "candle": 1794369600,
       "reason": "Halten: keine zugelassene Strategie"
+    },
+    {
+      "time": "2026-11-11T13:15:05+00:00",
+      "candle": 1794384000,
+      "reason": "Halten: keine zugelassene Strategie"
     }
   ],
   "realized_pnl_eur": 0.0,
@@ -504,5 +514,5 @@
     "initial_equity": 100.0,
     "qty": 0.0014390183679916409
   },
-  "last_success_utc": "2026-11-11T09:01:11+00:00"
+  "last_success_utc": "2026-11-11T13:15:05+00:00"
 }
