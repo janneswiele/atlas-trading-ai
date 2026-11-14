@@ -1,0 +1,10 @@
+{
+  "purpose": "RESEARCH_ONLY",
+  "status": "APPROVED",
+  "source_type": "synthetic",
+  "approval_id": "DEMO_SYNTHETIC_NOT_REAL_WORLD_EVIDENCE",
+  "sha256": "5edcf20a1ca73677fdba138ab54b188845a4e97ce8cd2f58c367ccc04ede2cc0",
+  "start_ms": 1577836800000,
+  "end_exclusive_ms": 1589932800000,
+  "warning": "DEMONSTRATION_ONLY. Not real market prices; cannot grant trading approval."
+}
