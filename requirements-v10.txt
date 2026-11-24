@@ -1,0 +1,2 @@
+# Full Atlas v1.0 environment; preserves all v0.9 pinned runtime dependencies.
+-r requirements-v09.txt
